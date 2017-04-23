@@ -1,0 +1,157 @@
+liRealMadridry(twitteR)
+liRealMadridry(ROAuth)
+liRealMadridry(ggplot2)
+liRealMadridry(httr)
+liRealMadridry(plyr)
+liRealMadridry(tm)
+liRealMadridry(wordcloud)
+liRealMadridry(RSentiment)
+liRealMadridry(RWeka)
+liRealMadridry(DT)
+liRealMadridry(stringr)
+liRealMadridry(syuzhet)
+
+# Download "cacert.pem" file
+download.file(url="http://curl.haxx.se/ca/cacert.pem",destfile="E:\\MR\\cacert.pem")
+
+#create an object "cred" that will save the authenticated object that we can use for later sessions
+ cred <- OAuthFactory$new(consumerKey='*******************',
+      consumerSecret='*************************',
+      requestURL='https://api.twitter.com/oauth/request_token',
+      accessURL='https://api.twitter.com/oauth/access_token',
+      authURL='https://api.twitter.com/oauth/authorize')
+
+# Executing the next step generates an output --> To enable the connection, please direct your web browser to: <hyperlink> . Note:  You only need to do this part once
+ cred$handshake(cainfo="E:\\MR\\cacert.pem")
+ 
+#save for later use for Windows
+save(cred, file="E:\\MR\\twitter authentication.Rdata")
+
+load("E:\\MR\\twitter authentication.Rdata")
+
+consumerKey="*********************"	
+consumerSecret="***********************************"
+access_token="**************************************"
+access_secret_token="*************************************"				 
+setup_twitter_oauth(consumerKey,consumerSecret,access_token,access_secret_token)
+
+FCB.list <- searchTwitter('#FCB #UCL', n=1000, cainfo="cacert.pem")  
+FCB.df = twListToDF(FCB.list)  
+
+RealMadrid.list <- searchTwitter('#RealMadrid #UCL', n=1000, cainfo="cacert.pem")  
+RealMadrid.df = twListToDF(RealMadrid.list)  
+
+JUV.list <- searchTwitter('#JUV #UCL', n=1000, cainfo="cacert.pem")  
+JUV.df = twListToDF(JUV.list)  
+
+FCBayern.list <- searchTwitter('#FCBayern #UCL', n=1000, cainfo="cacert.pem")  
+FCBayern.df = twListToDF(FCBayern.list) 
+
+score.sentiment = function(sentences, pos.words, neg.words,.progress='none')  
+{  
+  require(plyr)  
+  require(stringr)       
+
+  good.smiley <- c(":)")
+  bad.smiley <- c(":(",";)",":'",":P") 
+  
+  scores = laply(sentences, function(sentence, pos.words, neg.words) {  
+    
+    # clean up sentences with R's regex-driven global substitute, gsub():  
+    
+    sentence = gsub(":)", 'awsum', sentence)
+     
+    sentence = gsub('[[:punct:]]', '', sentence)  
+    
+    sentence = gsub('[[:cntrl:]]', '', sentence)  
+    
+    sentence = gsub('\\d+', '', sentence)  
+    
+    # and convert to lower case:  
+    
+    sentence = tolower(sentence)  
+    
+    # split into words. str_split is in the stringr package  
+    
+    word.list = str_split(sentence, '\\s+')  
+    
+    # sometimes a list() is one level of hierarchy too much  
+    
+    words = unlist(word.list)  
+    
+    # compare our words to the dictionaries of positive & negative terms  
+    
+    pos.matches = match(words, pos.words)  
+    neg.matches = match(words, neg.words)  
+    
+    # match() returns the position of the matched term or NA  
+    # we just want a TRUE/FALSE:  
+    
+    pos.matches = !is.na(pos.matches)  
+    
+    neg.matches = !is.na(neg.matches)  
+    
+    # and conveniently enough, TRUE/FALSE will be treated as 1/0 by sum():  
+    
+    score = sum(pos.matches) - sum(neg.matches)  
+    
+    return(score)  
+    
+  }, pos.words, neg.words, .progress=.progress )  
+  scores.df = data.frame(score=scores, text=sentences)  
+  return(scores.df)  
+} 
+
+#Load sentiment word lists
+hu.liu.pos = scan('C:/temp/positive-words.txt', what='character', comment.char=';')
+hu.liu.neg = scan('C:/temp/negative-words.txt', what='character', comment.char=';')
+
+#Add words to list
+pos.words = c(hu.liu.pos, 'upgrade', 'awsum')
+neg.words = c(hu.liu.neg, 'wtf', 'wait','waiting', 'epicfail', 'mechanical',"suspension","no")
+team = c("vs.","vs","versus")
+
+#convert text to factor
+FCB.df$text<-as.factor(FCB.df$text)
+RealMadrid.df$text<-as.factor(RealMadrid.df$text)
+JUV.df$text<-as.factor(JUV.df$text)
+FCBayern.df$text<-as.factor(FCBayern.df$text)
+
+#calculate all the scores
+FCB.scores = score.sentiment(FCB.df$text, pos.words,neg.words, .progress='text')
+RealMadrid.scores = score.sentiment(RealMadrid.df$text, pos.words,neg.words, .progress='text')
+JUV.scores = score.sentiment(JUV.df$text,pos.words,neg.words, .progress='text')
+FCBayern.scores = score.sentiment(FCBayern.df$text,pos.words,neg.words, .progress='text')
+
+FCB.scores$Team = 'Barcelona'
+RealMadrid.scores$Team = 'RealMadrid'
+JUV.scores$Team = 'Juventus'
+FCBayern.scores$Team = 'BayernMunich'
+
+#Check the negative tweets. What made them negative
+FCB.scores.2 = subset(FCB.scores,FCB.scores$score < 0)
+
+head(FCB.scores.2)
+
+# Final outputs
+hist(FCB.scores$score)
+hist(RealMadrid.scores$score)
+hist(JUV.scores$score)
+hist(FCBayern.scores$score)
+
+table(FCB.scores$score)
+table(RealMadrid.scores$score)
+table(JUV.scores$score)
+table(FCBayern.scores$score)
+
+
+
+head(all.scores)
+all.scores = rbind(FCB.scores, JUV.scores, FCBayern.scores,RealMadrid.scores)
+
+table(all.scores$score,all.scores$Team)
+
+ggplot(data=all.scores) + 
+  geom_bar(mapping=aes(x=score, fill=Team), binwidth=1) +
+  facet_grid(Team~.) + 
+  theme_bw() + scale_fill_brewer() 
